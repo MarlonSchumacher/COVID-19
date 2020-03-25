@@ -141,6 +141,27 @@ ggsave("Test.png", width = 25, height = 30, units = "cm")
 
 
 df_prepared %>% 
+  dplyr::filter(type == "Confirmed" & date >= lubridate::ymd("2020-03-01")) %>% 
+  ggplot(aes(x = date, y = cases, color = country)) +
+  geom_line() +
+  theme_minimal() +
+  scale_y_log10() +
+  scale_color_manual(values = c("Germany" =  "#D55E00",
+                                "US" = "#E69F00", 
+                                "Italy" = "#56B4E9",
+                                "France" = "#009E73",
+                                "Spain" = "grey50",
+                                "United Kingdom" = "#0072B2")) +
+  gghighlight(use_direct_label = FALSE)+ 
+  theme(legend.position = "bottom") +
+  labs(x = NULL, y = NULL, color = NULL, title = "Covid-19: Change Of Confirmed Cases",
+       subtitle = "Moving Avegerage (5)") +
+  facet_wrap(~country, scale = "free", ncol = 3)
+
+
+
+
+df_prepared %>% 
   dplyr::filter(type == "Death" & date >= lubridate::ymd("2020-03-01")) %>% 
   ggplot(aes(x = date, y = rate_ma_5, color = country)) +
   geom_line() +
