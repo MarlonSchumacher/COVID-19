@@ -53,15 +53,20 @@ prepared_list_df <- purrr::map(.x = list_df,
                                  dplyr::mutate(date = stringr::str_remove_all(date, "X"),
                                                date = stringr::str_replace_all(date, "[.]", "-"),
                                                date = lubridate::mdy(date)) %>% 
-                                 dplyr::filter(Country.Region %in% relevant_countries & date >= lubridate::ymd("2020-01-01")) %>% 
                                  dplyr::select(Country.Region, date, cases))
 
 prepared_list_df <- purrr::map2(.x = prepared_list_df,
                                 .y = names(prepared_list_df),
                                 .f = ~dplyr::mutate(.x, type = get_type(.y)))
 
+eu_countries <- c("Austria", "Belgium", "Denmark", "Estonia", "Finland",
+                  "France", "Germany", "Irland", "Iceland", "Italy",
+                  "Lichtenstein", "Luxembourg", "Netherlands", "New Zealand", "Norway",
+                  "Poland", "Spain", "Sweden", "Switzerland", "Ukraine", "United Kingdom")
+
 
 df_prepared <- dplyr::bind_rows(prepared_list_df) %>% 
+  dplyr::filter(Country.Region %in% relevant_countries & date >= lubridate::ymd("2020-01-01")) %>% 
   dplyr::group_by(date, Country.Region, type) %>% 
   dplyr::summarise(cases = sum(cases, na.rm = TRUE)) %>% 
   dplyr::ungroup() %>% 
@@ -70,12 +75,67 @@ df_prepared <- dplyr::bind_rows(prepared_list_df) %>%
   dplyr::mutate(rate = (cases-lag(cases))/lag(cases),
                 rate = round(rate, 2),
                 rate_ma_5 = (lag(rate, 4) + lag(rate, 3) + lag(rate, 2) + lag(rate, 1) + rate)/5,
+                rate_ma_7 = (lag(rate, 6) + lag(rate, 5) + lag(rate, 4) + lag(rate, 3) + 
+                               lag(rate, 2) + lag(rate, 1) + rate)/7,
                 cases_ma_5 = (lag(cases, 4) + lag(cases, 3) + lag(cases, 2) + lag(cases, 1) + cases)/5,
                 rate_string = paste0(as.character(rate), "%"),
                 rate_string = ifelse(stringr::str_detect(rate_string, "NaN"), "", rate_string)) %>% 
   dplyr::ungroup() %>% 
-  dplyr::rename(country = Country.Region) 
+  dplyr::rename(country = Country.Region)
 
+
+df_prepared_region <- dplyr::bind_rows(prepared_list_df) %>% 
+  dplyr::rename(country = Country.Region) %>% 
+  dplyr::mutate(region = case_when(
+    country == "US" ~ "United States",
+    country %in% eu_countries ~ "Europe",
+    TRUE  ~ "Other"
+  )) %>% 
+  # dplyr::filter(Country.Region %in% relevant_countries & date >= lubridate::ymd("2020-01-01")) %>% 
+  dplyr::group_by(date, region, type) %>% 
+  dplyr::summarise(cases = sum(cases, na.rm = TRUE)) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::group_by(region, type) %>% 
+  dplyr::arrange(date) %>% 
+  dplyr::mutate(rate = (cases-lag(cases))/lag(cases),
+                rate = round(rate, 2),
+                rate_ma_5 = (lag(rate, 4) + lag(rate, 3) + lag(rate, 2) + lag(rate, 1) + rate)/5,
+                rate_ma_7 = (lag(rate, 6) + lag(rate, 5) + lag(rate, 4) + lag(rate, 3) + 
+                               lag(rate, 2) + lag(rate, 1) + rate)/7,
+                cases_ma_5 = (lag(cases, 4) + lag(cases, 3) + lag(cases, 2) + lag(cases, 1) + cases)/5,
+                rate_string = paste0(as.character(rate), "%"),
+                rate_string = ifelse(stringr::str_detect(rate_string, "NaN"), "", rate_string)) %>% 
+  dplyr::ungroup()
+
+df_prepared_region %>% 
+  dplyr::filter(date >= lubridate::ymd("2020-03-01") & type == "Confirmed") %>% 
+  ggplot(aes(x = date, y = cases, color = region)) +
+  geom_line() +
+  theme_minimal() +
+  scale_y_log10() +
+  facet_wrap(~region, scale = "free", ncol = 3) +
+  scale_color_manual(values = c("Europe" =  "#D55E00",
+                                "United States" = "#E69F00", 
+                                "Other" = "#56B4E9")) +
+  gghighlight(use_direct_label = FALSE) + 
+  theme(legend.position = "bottom") +
+  labs(x = NULL, y = NULL, color = NULL, title = "Covid-19: Change Of Confirmed Cases",
+       subtitle = "Log-Scale")
+
+df_prepared_region %>% 
+  dplyr::filter(type == "Confirmed" & date >= lubridate::ymd("2020-03-01")) %>% 
+  ggplot(aes(x = date, y = rate_ma_7, color = region)) +
+  geom_line() +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::percent) +
+  scale_color_manual(values = c("Europe" =  "#D55E00",
+                                "United States" = "#E69F00", 
+                                "Other" = "#56B4E9"))  +
+  gghighlight(use_direct_label = FALSE)+ 
+  theme(legend.position = "bottom") +
+  labs(x = NULL, y = NULL, color = NULL, title = "Covid-19: Change Of Confirmed Cases",
+       subtitle = "Moving Avegerage (5)") +
+  facet_wrap(~region, scale = "free", ncol = 3)
 
 plot1 <- df_prepared %>% 
   dplyr::filter(type == "Confirmed" & date >= lubridate::ymd("2020-03-01")) %>% 
